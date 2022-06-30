@@ -625,6 +625,8 @@ class AsyncGRPCClient:
 
         if parse:
             txs = [await parse_tx(tx) for tx in tx_responses]
+        else: 
+            txs = tx_responses
         # print(f"\n{txs=}\n")
         return txs
 
