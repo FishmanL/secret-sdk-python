@@ -115,6 +115,41 @@ If you want to make asynchronous, non-blocking LCD requests, you can use AsyncLC
 >>> asyncio.get_event_loop().run_until_complete(main())
 </code></pre>
 
+You can improve the efficiency of consecutive queries by making them asynchronous.
+
+<pre><code>
+>>> import asyncio
+>>> import uvloop
+
+>>> from secret_sdk.client.lcd import AsyncLCDClient
+>>> from secret_sdk.exceptions import LCDResponseError
+
+>>> def owner_of(token_id):
+        return {
+                "owner_of": {
+                    "token_id": token_id,
+                }
+            }
+
+>>> async def query_owner(secret, contract_address, token_id, query):
+        try:
+            msg = await secret.wasm.contract_query(contract_address, query)
+            return (token_id, msg["owner_of"]["owner"])
+        except LCDResponseError:
+            return (token_id, "")
+
+>>> async def query_collection(contract_address, token_ids):
+        <strong>async with AsyncLCDClient(chain_id="secret-4", url=node_rest_endpoint) as secret: </strong>
+            requests = [query_owner(secret, contract_address, token, owner_of(token)) for token in token_ids]
+            <strong>owners = await asyncio.gather(*requests, return_exceptions=True)</strong>
+            print(owners)
+            <strong>await secret.session.close() # you must close the session </strong>
+
+>>> uvloop.install()
+>>> if __name__ == '__main__':
+        asyncio.run(query_collection(contract_address, token_ids))
+</code></pre>
+
 ## Building and Signing Transactions
 
 If you wish to perform a state-changing operation on the Secret blockchain such as sending tokens, swapping assets, withdrawing rewards, or even invoking functions on smart contracts, you must create a **transaction** and broadcast it to the network.
@@ -159,7 +194,24 @@ Once you have your Wallet, you can create a StdTx using `Wallet.create_and_sign_
 Or use the abstraction `wallet.send_tokens` (see `wallet.execute_tx` to execute a smart contract with `handle_msg`).
 
 ```
->>> tx = wallet.send_tokens(wallet.key.acc_address, RECIPIENT, "1000000uscrt")
+>>> tx = wallet.send_tokens(recipient_addr=RECIPIENT, transfer_amount="1000000uscrt")
+```
+
+### Batch Transactions
+You can combine muliple state-changing transactions for the same contract into a single transaction. The contract used here is from the [Counter contract example](https://docs.scrt.network/secret-network-documentation/development/intro-to-secret-contracts)
+
+```
+msg = {
+  'increment': {}
+}
+
+msg_list = [msg for _ in range(10)]
+
+tx = wallet.execute_tx(
+  CONTRACT_ADDR,
+  msg_list,
+  memo="My first batch transaction!",
+)
 ```
 
 <br/>
